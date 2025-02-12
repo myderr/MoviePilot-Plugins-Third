@@ -30,7 +30,7 @@ from app.utils.string import StringUtils
 
 class DownloaderHelper(_PluginBase):
     # 插件名称
-    plugin_name = "下载器助手"
+    plugin_name = "下载器助手_改"
     # 插件描述
     plugin_desc = "自动标签、自动做种、自动删种。"
     # 插件图标
@@ -38,9 +38,9 @@ class DownloaderHelper(_PluginBase):
     # 插件版本
     plugin_version = "4.0.3"
     # 插件作者
-    plugin_author = "hotlcc"
+    plugin_author = "myderr"
     # 作者主页
-    author_url = "https://github.com/hotlcc"
+    author_url = "https://github.com/myderr"
     # 插件配置项ID前缀
     plugin_config_prefix = "com.hotlcc.downloaderhelper."
     # 加载顺序
@@ -1518,7 +1518,7 @@ class DownloaderHelper(_PluginBase):
 
         return site_tag, delete_suggest
 
-    def __check_need_delete_for_qbittorrent(self, torrent: TorrentDictionary, context: TaskContext) -> Tuple[bool, str]:
+    def __check_need_delete_for_qbittorrent(self, torrent: TorrentDictionary, context: TaskContext,torrents: List[TorrentDictionary]) -> Tuple[bool, str]:
         """
         检查qb种子是否满足删除条件
         :param context: 任务上下文
@@ -1534,6 +1534,21 @@ class DownloaderHelper(_PluginBase):
         # 根据种子状态判断是否应该删种：状态为丢失文件时需要删除
         if torrent.get('state') == 'missingFiles':
             return True, "丢失文件", False
+        
+        name = torrent.get('name')
+        torrent_tags = self.__split_tags(torrent.get('tags')) or []
+        if 'IYUU自动辅种' in torrent_tags:
+            isHave = False
+            for item_torrent in torrents:
+                item_torrent_tags = self.__split_tags(item_torrent.get('tags')) or []
+                if 'IYUU自动辅种' in item_torrent_tags:
+                    continue
+                item_nam = item_torrent.get('name')
+                if name == item_nam:
+                    isHave = True
+            if not isHave:
+                return True,"IYUU辅种任务不存在",False
+        
 
         # 源文件删除事件数据
         download_file_deleted_event_data = context.get_download_file_deleted_event_data()
@@ -2126,7 +2141,7 @@ class DownloaderHelper(_PluginBase):
             if self.__exit_event.is_set():
                 logger.warn('插件服务正在退出，子任务终止')
                 return count
-            if (self.__delete_single_for_qbittorrent(downloader_name=downloader_name, qbittorrent=qbittorrent, torrent=torrent, context=context)):
+            if (self.__delete_single_for_qbittorrent(downloader_name=downloader_name, qbittorrent=qbittorrent, torrent=torrent, context=context,torrents=torrents)):
                 count += 1
                 torrents_delete.append(torrent)
         if torrents_delete:
@@ -2135,7 +2150,7 @@ class DownloaderHelper(_PluginBase):
         logger.info(f'下载器[{downloader_name}] - 批量自动删种结束')
         return count
 
-    def __delete_single_for_qbittorrent(self, downloader_name: str, qbittorrent: Qbittorrent, torrent: TorrentDictionary, context: TaskContext) -> bool:
+    def __delete_single_for_qbittorrent(self, downloader_name: str, qbittorrent: Qbittorrent, torrent: TorrentDictionary, context: TaskContext,torrents: List[TorrentDictionary]) -> bool:
         """
         qb单个自动删种
         :return: 是否执行
@@ -2148,7 +2163,7 @@ class DownloaderHelper(_PluginBase):
         # 判断种子中是否存在排除的标签
         if self.__exists_exclude_tag(torrent_tags):
             return False
-        need_delete, reason, delete_file = self.__check_need_delete_for_qbittorrent(torrent=torrent, context=context)
+        need_delete, reason, delete_file = self.__check_need_delete_for_qbittorrent(torrent=torrent, context=context,torrents=torrents)
         if not need_delete:
             return False
         qbittorrent.delete_torrents(delete_file=delete_file, ids=hash_str)
